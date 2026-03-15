@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:authjs.dev)",
+      "WebFetch(domain:www.prisma.io)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "Bash(cd:*)"
+    ]
+  }
+}
