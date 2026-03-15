@@ -16,9 +16,25 @@ export function useAuth() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (event, session) => {
         setUser(session?.user ?? null);
         setLoading(false);
+
+        // Capture Google provider token on sign-in
+        if (event === "SIGNED_IN" && session?.provider_token) {
+          try {
+            await fetch("/api/auth/store-token", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                provider_token: session.provider_token,
+                provider_refresh_token: session.provider_refresh_token || null,
+              }),
+            });
+          } catch (e) {
+            console.error("Failed to store provider token:", e);
+          }
+        }
       }
     );
 
