@@ -12,6 +12,15 @@ import { useFreeBusy } from "@/hooks/useFreeBusy";
 import { usePairStatus } from "@/hooks/usePairStatus";
 import { useCurrentSlot } from "@/hooks/useCurrentSlot";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuthGuard } from "@/components/AuthGuard";
+
+export default function DashboardPage() {
+  return (
+    <AuthGuard>
+      <DashboardContent />
+    </AuthGuard>
+  );
+}
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00");
@@ -41,7 +50,7 @@ function shiftDate(dateStr: string, days: number): string {
   return d.toISOString().split("T")[0];
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
   const [date, setDate] = useState(getToday);
 

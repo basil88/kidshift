@@ -9,8 +9,17 @@ import { PairCodeDisplay } from "@/components/pair/PairCodeDisplay";
 import { PairCodeEntry } from "@/components/pair/PairCodeEntry";
 import { PartnerStatus } from "@/components/pair/PartnerStatus";
 import { usePairStatus } from "@/hooks/usePairStatus";
+import { AuthGuard } from "@/components/AuthGuard";
 
 export default function PairPage() {
+  return (
+    <AuthGuard>
+      <PairPageContent />
+    </AuthGuard>
+  );
+}
+
+function PairPageContent() {
   const router = useRouter();
   const { data: pairData, isLoading, refresh } = usePairStatus();
   const [createdCode, setCreatedCode] = useState<string | null>(null);
