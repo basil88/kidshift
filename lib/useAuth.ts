@@ -29,7 +29,7 @@ export function useAuth() {
     supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback${redirectTo ? `?next=${redirectTo}` : ""}`,
+        redirectTo: `${window.location.origin}/auth/callback${redirectTo ? `?next=${redirectTo}` : ""}`,
         scopes: "https://www.googleapis.com/auth/calendar.freebusy",
         queryParams: {
           access_type: "offline",
