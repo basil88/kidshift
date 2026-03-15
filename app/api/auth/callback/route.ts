@@ -32,8 +32,17 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
+  console.log("[AUTH CALLBACK] exchangeCodeForSession result:", {
+    hasSession: !!data.session,
+    hasError: !!error,
+    errorMessage: error?.message,
+    userId: data.session?.user?.id,
+    providerToken: data.session?.provider_token ? "PRESENT" : "NULL",
+    providerRefreshToken: data.session?.provider_refresh_token ? "PRESENT" : "NULL",
+  });
+
   if (error || !data.session) {
-    console.error("Auth callback error:", error);
+    console.error("[AUTH CALLBACK] Auth failed:", error);
     return NextResponse.redirect(`${origin}/auth/error?error=AuthFailed`);
   }
 
@@ -41,13 +50,16 @@ export async function GET(request: NextRequest) {
   const { provider_token, provider_refresh_token } = data.session;
 
   if (provider_token) {
-    await supabaseAdmin.from("google_tokens").upsert({
+    const { error: upsertError } = await supabaseAdmin.from("google_tokens").upsert({
       user_id: data.session.user.id,
       access_token: provider_token,
       refresh_token: provider_refresh_token || null,
-      expires_at: Math.floor(Date.now() / 1000 + 3600), // Google tokens last ~1h
+      expires_at: Math.floor(Date.now() / 1000 + 3600),
       updated_at: new Date().toISOString(),
     });
+    console.log("[AUTH CALLBACK] Token upsert:", upsertError ? `ERROR: ${upsertError.message}` : "SUCCESS");
+  } else {
+    console.warn("[AUTH CALLBACK] No provider_token in session — tokens NOT stored");
   }
 
   return response;
