@@ -4,8 +4,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrismaClient() {
+  // Strip sslmode from URL — we configure SSL explicitly below
+  const url = process.env.DATABASE_URL!.replace(/[?&]sslmode=[^&]*/g, "");
+  const cleanUrl = url.endsWith("?") ? url.slice(0, -1) : url;
+
   const adapter = new PrismaPg({
-    connectionString: process.env.DATABASE_URL!,
+    connectionString: cleanUrl,
     ssl: { rejectUnauthorized: false },
   });
   return new PrismaClient({ adapter });
