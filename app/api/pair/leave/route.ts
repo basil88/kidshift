@@ -1,33 +1,35 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST() {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-  });
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("pair_id")
+    .eq("id", user.id)
+    .single();
 
-  if (!user?.pairId) {
+  if (!profile?.pair_id) {
     return NextResponse.json({ error: "Not in a pair" }, { status: 400 });
   }
 
-  await prisma.$transaction([
-    // Remove both users from the pair
-    prisma.user.updateMany({
-      where: { pairId: user.pairId },
-      data: { pairId: null },
-    }),
-    // Mark pair as dissolved
-    prisma.pair.update({
-      where: { id: user.pairId },
-      data: { status: "DISSOLVED" },
-    }),
-  ]);
+  // Remove both users from the pair
+  await supabaseAdmin
+    .from("profiles")
+    .update({ pair_id: null })
+    .eq("pair_id", profile.pair_id);
+
+  // Mark pair as dissolved
+  await supabaseAdmin
+    .from("pairs")
+    .update({ status: "DISSOLVED" })
+    .eq("id", profile.pair_id);
 
   return NextResponse.json({ success: true });
 }

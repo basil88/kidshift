@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -13,55 +14,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Code is required" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-  });
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("pair_id")
+    .eq("id", user.id)
+    .single();
 
-  if (user?.pairId) {
-    return NextResponse.json(
-      { error: "Already in a pair" },
-      { status: 400 }
-    );
+  if (profile?.pair_id) {
+    return NextResponse.json({ error: "Already in a pair" }, { status: 400 });
   }
 
-  const pair = await prisma.pair.findUnique({
-    where: { code: code.toUpperCase() },
-    include: { users: true },
-  });
+  const { data: pair } = await supabaseAdmin
+    .from("pairs")
+    .select("*, profiles(id)")
+    .eq("code", code.toUpperCase())
+    .single();
 
   if (!pair) {
     return NextResponse.json({ error: "Invalid code" }, { status: 404 });
   }
 
   if (pair.status !== "PENDING") {
-    return NextResponse.json(
-      { error: "This pair is no longer available" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "This pair is no longer available" }, { status: 400 });
   }
 
-  if (new Date() > pair.expiresAt) {
+  if (new Date() > new Date(pair.expires_at)) {
     return NextResponse.json({ error: "Code has expired" }, { status: 400 });
   }
 
-  if (pair.users.some((u) => u.id === session.user!.id)) {
-    return NextResponse.json(
-      { error: "Cannot pair with yourself" },
-      { status: 400 }
-    );
+  const members = (pair.profiles || []) as { id: string }[];
+  if (members.some((m) => m.id === user.id)) {
+    return NextResponse.json({ error: "Cannot pair with yourself" }, { status: 400 });
   }
 
   // Join the pair and activate it
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: session.user.id },
-      data: { pairId: pair.id },
-    }),
-    prisma.pair.update({
-      where: { id: pair.id },
-      data: { status: "ACTIVE" },
-    }),
-  ]);
+  await supabaseAdmin.from("profiles").update({ pair_id: pair.id }).eq("id", user.id);
+  await supabaseAdmin.from("pairs").update({ status: "ACTIVE" }).eq("id", pair.id);
 
   return NextResponse.json({ success: true, pairId: pair.id });
 }

@@ -1,9 +1,8 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/useAuth";
 import { useEffect, useState } from "react";
-import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,18 +15,17 @@ import {
 export default function InvitePage() {
   const params = useParams();
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { user, loading, signInWithGoogle } = useAuth();
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const code = params.code as string;
 
   useEffect(() => {
-    // Auto-join if signed in
-    if (status === "authenticated" && !joining && !error) {
+    if (!loading && user && !joining && !error) {
       handleJoin();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [loading, user]);
 
   const handleJoin = async () => {
     setJoining(true);
@@ -51,7 +49,7 @@ export default function InvitePage() {
     }
   };
 
-  if (status === "loading" || joining) {
+  if (loading || joining) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">
@@ -61,7 +59,7 @@ export default function InvitePage() {
     );
   }
 
-  if (status === "unauthenticated") {
+  if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
         <Card className="w-full max-w-sm">
@@ -75,11 +73,7 @@ export default function InvitePage() {
           </CardHeader>
           <CardContent>
             <Button
-              onClick={() =>
-                signIn("google", {
-                  callbackUrl: `/pair/invite/${code}`,
-                })
-              }
+              onClick={() => signInWithGoogle(`/pair/invite/${code}`)}
               className="w-full"
               size="lg"
             >

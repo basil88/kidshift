@@ -1,22 +1,21 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
-  const { data: session, status } = useSession();
+  const { user, loading, signInWithGoogle } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (!loading && user) {
       router.push("/pair");
     }
-  }, [status, router]);
+  }, [loading, user, router]);
 
-  if (status === "loading") {
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
@@ -37,7 +36,7 @@ export default function Home() {
           single view. See who&apos;s on kid duty at any time.
         </p>
         <Button
-          onClick={() => signIn("google", { callbackUrl: "/pair" })}
+          onClick={() => signInWithGoogle("/pair")}
           size="lg"
           className="w-full"
         >

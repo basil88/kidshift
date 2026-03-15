@@ -1,37 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase";
 import { getValidAccessToken } from "@/lib/token-refresh";
 import { fetchFreeBusy } from "@/lib/google-calendar";
 import { computeConflicts } from "@/lib/freebusy";
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
-
-  // Default to today
   const date = dateParam || new Date().toISOString().split("T")[0];
 
-  // Full day range in UTC
   const timeMin = `${date}T00:00:00Z`;
   const timeMax = `${date}T23:59:59Z`;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      pair: { include: { users: true } },
-    },
-  });
+  // Get user's profile + pair info
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("pair_id")
+    .eq("id", user.id)
+    .single();
 
-  if (!user?.pair || user.pair.status !== "ACTIVE") {
-    // Return only user's own data if not paired
+  if (!profile?.pair_id) {
+    // Not paired — return own data only
     try {
-      const token = await getValidAccessToken(session.user.id);
+      const token = await getValidAccessToken(user.id);
       const you = await fetchFreeBusy(token, timeMin, timeMax);
       return NextResponse.json({
         you,
@@ -40,24 +38,44 @@ export async function GET(request: NextRequest) {
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : "Unknown error";
       return NextResponse.json({ error: message }, { status: 500 });
     }
   }
 
-  const partner = user.pair.users.find((u) => u.id !== session.user!.id);
-  if (!partner) {
-    return NextResponse.json(
-      { error: "Partner not found" },
-      { status: 500 }
-    );
+  // Get pair status and partner
+  const { data: pair } = await supabaseAdmin
+    .from("pairs")
+    .select("status, profiles(id)")
+    .eq("id", profile.pair_id)
+    .single();
+
+  if (!pair || pair.status !== "ACTIVE") {
+    try {
+      const token = await getValidAccessToken(user.id);
+      const you = await fetchFreeBusy(token, timeMin, timeMax);
+      return NextResponse.json({
+        you,
+        partner: [],
+        conflicts: [],
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
 
-  // Fetch tokens and busy data for both users in parallel
+  const members = (pair.profiles || []) as { id: string }[];
+  const partner = members.find((m) => m.id !== user.id);
+
+  if (!partner) {
+    return NextResponse.json({ error: "Partner not found" }, { status: 500 });
+  }
+
   try {
     const [yourToken, partnerToken] = await Promise.all([
-      getValidAccessToken(session.user.id),
+      getValidAccessToken(user.id),
       getValidAccessToken(partner.id),
     ]);
 
@@ -75,8 +93,7 @@ export async function GET(request: NextRequest) {
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

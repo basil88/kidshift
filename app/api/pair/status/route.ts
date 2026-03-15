@@ -1,37 +1,44 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      pair: {
-        include: { users: true },
-      },
-    },
-  });
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("pair_id")
+    .eq("id", user.id)
+    .single();
 
-  if (!user?.pair) {
+  if (!profile?.pair_id) {
     return NextResponse.json({ paired: false });
   }
 
-  const partner = user.pair.users.find((u) => u.id !== session.user!.id);
+  const { data: pair } = await supabaseAdmin
+    .from("pairs")
+    .select("*, profiles(id, name, image)")
+    .eq("id", profile.pair_id)
+    .single();
+
+  if (!pair) {
+    return NextResponse.json({ paired: false });
+  }
+
+  const members = (pair.profiles || []) as { id: string; name: string | null; image: string | null }[];
+  const partner = members.find((m) => m.id !== user.id);
 
   return NextResponse.json({
     paired: true,
     pair: {
-      id: user.pair.id,
-      code: user.pair.code,
-      status: user.pair.status,
-      partner: partner
-        ? { name: partner.name, image: partner.image }
-        : null,
+      id: pair.id,
+      code: pair.code,
+      status: pair.status,
+      partner: partner ? { name: partner.name, image: partner.image } : null,
     },
   });
 }
