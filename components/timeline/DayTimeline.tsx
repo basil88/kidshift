@@ -14,23 +14,24 @@ interface DayTimelineProps {
 const START_HOUR = 7;
 const END_HOUR = 21; // 9 PM
 const SLOT_MINUTES = 30;
+const HALF = 15; // 15-min precision within each 30-min slot
 
-function getSlotState(
-  slotStart: Date,
-  slotEnd: Date,
+function getHalfState(
+  halfStart: Date,
+  halfEnd: Date,
   yourBusy: BusySlot[],
   partnerBusy: BusySlot[]
 ): SlotState {
   const youBusy = yourBusy.some((s) => {
     const bStart = new Date(s.start).getTime();
     const bEnd = new Date(s.end).getTime();
-    return bStart < slotEnd.getTime() && bEnd > slotStart.getTime();
+    return bStart < halfEnd.getTime() && bEnd > halfStart.getTime();
   });
 
   const theyBusy = partnerBusy.some((s) => {
     const bStart = new Date(s.start).getTime();
     const bEnd = new Date(s.end).getTime();
-    return bStart < slotEnd.getTime() && bEnd > slotStart.getTime();
+    return bStart < halfEnd.getTime() && bEnd > halfStart.getTime();
   });
 
   if (youBusy && theyBusy) return "conflict";
@@ -55,10 +56,11 @@ export function DayTimeline({ yourBusy, partnerBusy, date }: DayTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const nowSlotRef = useRef<HTMLDivElement>(null);
 
-  // Generate 30-min slots from START_HOUR to END_HOUR
+  // Generate 30-min slots from START_HOUR to END_HOUR, each with two 15-min halves
   const slots: {
     time: string;
-    state: SlotState;
+    firstHalf: SlotState;
+    secondHalf: SlotState;
     isCurrent: boolean;
     start: Date;
     end: Date;
@@ -67,11 +69,13 @@ export function DayTimeline({ yourBusy, partnerBusy, date }: DayTimelineProps) {
   for (let h = START_HOUR; h < END_HOUR; h++) {
     for (let m = 0; m < 60; m += SLOT_MINUTES) {
       const slotStart = new Date(`${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+      const slotMid = new Date(slotStart.getTime() + HALF * 60 * 1000);
       const slotEnd = new Date(slotStart.getTime() + SLOT_MINUTES * 60 * 1000);
 
       slots.push({
         time: formatSlotTime(slotStart),
-        state: getSlotState(slotStart, slotEnd, yourBusy, partnerBusy),
+        firstHalf: getHalfState(slotStart, slotMid, yourBusy, partnerBusy),
+        secondHalf: getHalfState(slotMid, slotEnd, yourBusy, partnerBusy),
         isCurrent: isCurrentSlot(slotStart, slotEnd),
         start: slotStart,
         end: slotEnd,
@@ -97,7 +101,8 @@ export function DayTimeline({ yourBusy, partnerBusy, date }: DayTimelineProps) {
         <div key={i} ref={slot.isCurrent ? nowSlotRef : undefined}>
           <TimeSlot
             time={slot.time}
-            state={slot.state}
+            firstHalf={slot.firstHalf}
+            secondHalf={slot.secondHalf}
             isCurrentSlot={slot.isCurrent}
           />
         </div>
