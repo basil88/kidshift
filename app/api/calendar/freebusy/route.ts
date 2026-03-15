@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
+      console.error("FreeBusy error:", error);
       const message = error instanceof Error ? error.message : "Unknown error";
       return NextResponse.json({ error: message }, { status: 500 });
     }
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
+      console.error("FreeBusy error:", error);
       const message = error instanceof Error ? error.message : "Unknown error";
       return NextResponse.json({ error: message }, { status: 500 });
     }
@@ -93,6 +95,7 @@ export async function GET(request: NextRequest) {
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
+    console.error("FreeBusy error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
