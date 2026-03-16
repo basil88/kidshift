@@ -18,12 +18,17 @@ const tools: Anthropic.Tool[] = [
       properties: {
         date: {
           type: "string",
-          description: "The date to check, in YYYY-MM-DD format.",
+          description: "The start date to check, in YYYY-MM-DD format.",
+        },
+        date_end: {
+          type: "string",
+          description:
+            "Optional end date in YYYY-MM-DD format. Use this to check a multi-day range (e.g., for 'next meeting' queries, check today through the next few days). If omitted, only checks the single date.",
         },
         time_start: {
           type: "string",
           description:
-            "Optional start time in HH:MM (24h) format. If omitted, checks the whole day.",
+            "Optional start time in HH:MM (24h) format. If omitted, checks from the start of the day (or from now if checking today).",
         },
         time_end: {
           type: "string",
@@ -40,11 +45,19 @@ function buildSystemPrompt(
   timezone: string,
   partnerName: string | null
 ): string {
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: timezone });
+  const now = new Date();
+  const today = now.toLocaleDateString("en-CA", { timeZone: timezone });
+  const currentTime = now.toLocaleTimeString("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
   const name = partnerName || "your partner";
   return `You are a helpful calendar assistant. The user is asking about their partner's calendar availability.
 
 Today's date: ${today}
+Current time: ${currentTime}
 User's timezone: ${timezone}
 Partner's name: ${name}
 
@@ -53,6 +66,8 @@ You only have access to free/busy data — you can see WHEN the partner is busy,
 When the user asks about availability:
 1. Use the ${TOOL_NAME} tool to check the calendar.
 2. Interpret the results and give a clear, concise answer.
+3. For "next meeting" or "when is the next" questions, check from NOW onwards (use today's date with time_start set to the current time). If nothing found today, use date_end to check the next few days.
+4. When reporting results, only include meetings that haven't already passed (i.e., after ${currentTime} today).
 
 Keep responses short and conversational. Use the partner's name naturally.
 If a time slot is free, say so directly. If busy, mention the busy window(s) without speculating about what the events are.
@@ -96,9 +111,9 @@ async function getPartnerInfo(userId: string): Promise<{
 async function executeToolCall(
   partnerId: string,
   timezone: string,
-  input: { date: string; time_start?: string; time_end?: string }
+  input: { date: string; date_end?: string; time_start?: string; time_end?: string }
 ): Promise<string> {
-  const { date, time_start, time_end } = input;
+  const { date, date_end, time_start, time_end } = input;
 
   let timeMin: string;
   let timeMax: string;
@@ -107,7 +122,7 @@ async function executeToolCall(
     // Specific time window
     timeMin = toISO(date, time_start, timezone);
     if (time_end) {
-      timeMax = toISO(date, time_end, timezone);
+      timeMax = toISO(date_end || date, time_end, timezone);
     } else {
       // Default to 1-hour window
       const [h, m] = time_start.split(":").map(Number);
@@ -115,9 +130,9 @@ async function executeToolCall(
       timeMax = toISO(date, `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`, timezone);
     }
   } else {
-    // Whole day
+    // Whole day or multi-day range
     timeMin = toISO(date, "00:00", timezone);
-    timeMax = toISO(date, "23:59", timezone);
+    timeMax = toISO(date_end || date, "23:59", timezone);
   }
 
   try {
@@ -204,7 +219,7 @@ export async function processCalendarQuery(
       const toolResult = await executeToolCall(
         partnerId,
         userTimezone,
-        toolBlock.input as { date: string; time_start?: string; time_end?: string }
+        toolBlock.input as { date: string; date_end?: string; time_start?: string; time_end?: string }
       );
 
       // Second call: Claude formats the result into a natural language answer
