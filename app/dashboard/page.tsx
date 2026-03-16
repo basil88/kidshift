@@ -55,7 +55,7 @@ function DashboardContent() {
   const router = useRouter();
   const [date, setDate] = useState(getToday);
 
-  const { data: pairData, isLoading: pairLoading } = usePairStatus();
+  const { data: pairData, isLoading: pairLoading, refresh: pairRefresh } = usePairStatus();
   const { data: freeBusy, isLoading: fbLoading, error: fbError, refresh } = useFreeBusy(date);
 
   const currentSlot = useCurrentSlot(
@@ -86,6 +86,11 @@ function DashboardContent() {
             <PartnerStatus
               partner={pairData.pair.partner}
               status={pairData.pair.status}
+              onUnlink={async () => {
+                const res = await fetch("/api/pair/leave", { method: "POST" });
+                if (!res.ok) throw new Error("Failed to unlink");
+                pairRefresh();
+              }}
             />
           ) : (
             <Skeleton className="h-6 w-48" />
