@@ -41,6 +41,53 @@ function getHalfState(
   return "both-free";
 }
 
+// Find the busy block that overlaps a given time point
+function findOverlappingBlock(time: Date, blocks: BusySlot[]): BusySlot | null {
+  const t = time.getTime();
+  return blocks.find((s) => {
+    const start = new Date(s.start).getTime();
+    const end = new Date(s.end).getTime();
+    return start <= t && end > t;
+  }) || null;
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatTimeRange(slot: BusySlot): string {
+  const start = formatTime(new Date(slot.start));
+  const end = formatTime(new Date(slot.end));
+  return `${start}–${end}`;
+}
+
+// Build the label for a half-slot including the busy block's time range
+function getHalfLabel(
+  halfStart: Date,
+  state: SlotState,
+  yourBusy: BusySlot[],
+  partnerBusy: BusySlot[],
+  partnerName?: string | null
+): string {
+  if (state === "both-free") return "";
+  if (state === "conflict") return "CONFLICT";
+
+  if (state === "you-busy") {
+    const block = findOverlappingBlock(halfStart, yourBusy);
+    const range = block ? ` ${formatTimeRange(block)}` : "";
+    return `You're busy${range}`;
+  }
+
+  // partner-busy
+  const name = partnerName || "Partner";
+  const block = findOverlappingBlock(halfStart, partnerBusy);
+  const range = block ? ` ${formatTimeRange(block)}` : "";
+  return `${name} busy${range}`;
+}
+
 function formatSlotTime(date: Date): string {
   return date.toLocaleTimeString([], {
     hour: "numeric",
@@ -62,6 +109,8 @@ export function DayTimeline({ yourBusy, partnerBusy, date, partnerName }: DayTim
     time: string;
     firstHalf: SlotState;
     secondHalf: SlotState;
+    firstHalfLabel: string;
+    secondHalfLabel: string;
     isCurrent: boolean;
     start: Date;
     end: Date;
@@ -73,10 +122,15 @@ export function DayTimeline({ yourBusy, partnerBusy, date, partnerName }: DayTim
       const slotMid = new Date(slotStart.getTime() + HALF * 60 * 1000);
       const slotEnd = new Date(slotStart.getTime() + SLOT_MINUTES * 60 * 1000);
 
+      const firstHalf = getHalfState(slotStart, slotMid, yourBusy, partnerBusy);
+      const secondHalf = getHalfState(slotMid, slotEnd, yourBusy, partnerBusy);
+
       slots.push({
         time: formatSlotTime(slotStart),
-        firstHalf: getHalfState(slotStart, slotMid, yourBusy, partnerBusy),
-        secondHalf: getHalfState(slotMid, slotEnd, yourBusy, partnerBusy),
+        firstHalf,
+        secondHalf,
+        firstHalfLabel: getHalfLabel(slotStart, firstHalf, yourBusy, partnerBusy, partnerName),
+        secondHalfLabel: getHalfLabel(slotMid, secondHalf, yourBusy, partnerBusy, partnerName),
         isCurrent: isCurrentSlot(slotStart, slotEnd),
         start: slotStart,
         end: slotEnd,
@@ -104,8 +158,9 @@ export function DayTimeline({ yourBusy, partnerBusy, date, partnerName }: DayTim
             time={slot.time}
             firstHalf={slot.firstHalf}
             secondHalf={slot.secondHalf}
+            firstHalfLabel={slot.firstHalfLabel}
+            secondHalfLabel={slot.secondHalfLabel}
             isCurrentSlot={slot.isCurrent}
-            partnerName={partnerName}
           />
         </div>
       ))}

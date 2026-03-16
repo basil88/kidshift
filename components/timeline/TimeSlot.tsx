@@ -6,8 +6,9 @@ interface TimeSlotProps {
   time: string; // e.g. "7:00 AM"
   firstHalf: SlotState;
   secondHalf: SlotState;
+  firstHalfLabel: string;
+  secondHalfLabel: string;
   isCurrentSlot: boolean;
-  partnerName?: string | null;
 }
 
 const halfStyles: Record<SlotState, string> = {
@@ -17,14 +18,12 @@ const halfStyles: Record<SlotState, string> = {
   conflict: "bg-red-100 border-x border-red-300",
 };
 
-function getSlotLabel(state: SlotState, partnerName?: string | null): string {
-  switch (state) {
-    case "both-free": return "";
-    case "you-busy": return "You're busy";
-    case "partner-busy": return `${partnerName || "Partner"} busy`;
-    case "conflict": return "CONFLICT";
-  }
-}
+const textColors: Record<SlotState, string> = {
+  "both-free": "",
+  "you-busy": "text-blue-700",
+  "partner-busy": "text-amber-700",
+  conflict: "text-red-700",
+};
 
 // Pick the most important state to show a label for the row
 function primaryState(first: SlotState, second: SlotState): SlotState {
@@ -35,9 +34,11 @@ function primaryState(first: SlotState, second: SlotState): SlotState {
   return "both-free";
 }
 
-export function TimeSlot({ time, firstHalf, secondHalf, isCurrentSlot, partnerName }: TimeSlotProps) {
-  const label = getSlotLabel(primaryState(firstHalf, secondHalf), partnerName);
+export function TimeSlot({ time, firstHalf, secondHalf, firstHalfLabel, secondHalfLabel, isCurrentSlot }: TimeSlotProps) {
   const uniform = firstHalf === secondHalf;
+  const primary = primaryState(firstHalf, secondHalf);
+  // For uniform slots, pick the label from the first half (same block)
+  const uniformLabel = firstHalfLabel || secondHalfLabel;
 
   return (
     <div
@@ -55,19 +56,9 @@ export function TimeSlot({ time, firstHalf, secondHalf, isCurrentSlot, partnerNa
         {uniform ? (
           // Both halves same state — single block
           <div className={`flex-1 flex items-center px-3 ${halfStyles[firstHalf]}`}>
-            {label && (
-              <span
-                className={`text-xs font-medium ${
-                  firstHalf === "conflict"
-                    ? "text-red-700"
-                    : firstHalf === "you-busy"
-                    ? "text-blue-700"
-                    : firstHalf === "partner-busy"
-                    ? "text-amber-700"
-                    : ""
-                }`}
-              >
-                {label}
+            {uniformLabel && (
+              <span className={`text-xs font-medium ${textColors[primary]}`}>
+                {uniformLabel}
               </span>
             )}
           </div>
@@ -77,34 +68,18 @@ export function TimeSlot({ time, firstHalf, secondHalf, isCurrentSlot, partnerNa
             <div className={`h-6 flex items-center px-3 ${halfStyles[firstHalf]} ${
               firstHalf === "conflict" ? "border-t border-red-300" : ""
             }`}>
-              {firstHalf !== "both-free" && (
-                <span
-                  className={`text-[10px] font-medium ${
-                    firstHalf === "conflict"
-                      ? "text-red-700"
-                      : firstHalf === "you-busy"
-                      ? "text-blue-700"
-                      : "text-amber-700"
-                  }`}
-                >
-                  {getSlotLabel(firstHalf, partnerName)}
+              {firstHalfLabel && (
+                <span className={`text-[10px] font-medium ${textColors[firstHalf]}`}>
+                  {firstHalfLabel}
                 </span>
               )}
             </div>
             <div className={`h-6 flex items-center px-3 ${halfStyles[secondHalf]} ${
               secondHalf === "conflict" ? "border-b border-red-300" : ""
             }`}>
-              {secondHalf !== "both-free" && (
-                <span
-                  className={`text-[10px] font-medium ${
-                    secondHalf === "conflict"
-                      ? "text-red-700"
-                      : secondHalf === "you-busy"
-                      ? "text-blue-700"
-                      : "text-amber-700"
-                  }`}
-                >
-                  {getSlotLabel(secondHalf, partnerName)}
+              {secondHalfLabel && (
+                <span className={`text-[10px] font-medium ${textColors[secondHalf]}`}>
+                  {secondHalfLabel}
                 </span>
               )}
             </div>
