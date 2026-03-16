@@ -7,6 +7,7 @@ import { BusySlot } from "@/lib/types";
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 const TOOL_NAME = "check_partner_availability";
+const MAX_HISTORY_MESSAGES = 10; // 5 exchanges (user + assistant)
 
 const tools: Anthropic.Tool[] = [
   {
@@ -68,6 +69,8 @@ When the user asks about availability:
 2. Interpret the results and give a clear, concise answer.
 3. For "next meeting" or "when is the next" questions, check from NOW onwards (use today's date with time_start set to the current time). If nothing found today, use date_end to check the next few days.
 4. When reporting results, only include meetings that haven't already passed (i.e., after ${currentTime} today).
+
+If the user asks a follow-up question (like "are you sure?", "really?", "what about tomorrow?"), use the conversation history to understand what they're referring to and re-check the calendar if needed.
 
 Keep responses short and conversational. Use the partner's name naturally.
 If a time slot is free, say so directly. If busy, mention the busy window(s) without speculating about what the events are.
@@ -150,18 +153,41 @@ async function executeToolCall(
 
 function toISO(date: string, time: string, timezone: string): string {
   // Convert "date + time in user's timezone" to a UTC ISO string
+  // Uses formatToParts for reliable offset calculation (no string parsing)
   const [year, month, day] = date.split("-").map(Number);
   const [hour, min] = time.split(":").map(Number);
 
   // Start with a UTC guess
   const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, min, 0));
 
-  // Find how far the target timezone is from UTC at this instant
-  const utcStr = utcGuess.toLocaleString("en-US", { timeZone: "UTC" });
-  const tzStr = utcGuess.toLocaleString("en-US", { timeZone: timezone });
-  const offsetMs = new Date(tzStr).getTime() - new Date(utcStr).getTime();
+  // Use formatToParts to reliably extract timezone components
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  });
 
-  // Subtract the offset: user says "3 PM in UTC+2" → 1 PM UTC
+  const parts = formatter.formatToParts(utcGuess);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parseInt(parts.find((p) => p.type === type)?.value || "0");
+
+  const tzYear = get("year");
+  const tzMonth = get("month");
+  const tzDay = get("day");
+  let tzHour = get("hour");
+  if (tzHour === 24) tzHour = 0; // midnight edge case
+  const tzMin = get("minute");
+
+  // Build UTC date from timezone parts to compute offset
+  const tzAsUtc = Date.UTC(tzYear, tzMonth - 1, tzDay, tzHour, tzMin, 0);
+  const offsetMs = tzAsUtc - utcGuess.getTime();
+
+  // Subtract the offset to get the real UTC time
   return new Date(utcGuess.getTime() - offsetMs).toISOString();
 }
 
@@ -170,29 +196,83 @@ function formatBusySlots(slots: BusySlot[], timezone: string): string {
     return "No busy slots found — the calendar is completely free for this time range.";
   }
 
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const dateFormatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
   const formatted = slots.map((slot) => {
-    const start = new Date(slot.start).toLocaleTimeString("en-GB", {
-      timeZone: timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    const end = new Date(slot.end).toLocaleTimeString("en-GB", {
-      timeZone: timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    return `${start} – ${end}`;
+    const startDate = new Date(slot.start);
+    const endDate = new Date(slot.end);
+    const date = dateFormatter.format(startDate);
+    const start = formatter.format(startDate);
+    const end = formatter.format(endDate);
+    return `${date}: ${start} – ${end}`;
   });
 
   return `Busy slots:\n${formatted.join("\n")}`;
 }
 
+// --- Conversation history ---
+
+async function getConversationHistory(
+  chatId: number
+): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  const { data } = await supabaseAdmin
+    .from("telegram_messages")
+    .select("role, content")
+    .eq("telegram_chat_id", chatId)
+    .order("created_at", { ascending: true })
+    .limit(MAX_HISTORY_MESSAGES);
+
+  return (data || []).map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+}
+
+async function saveMessage(
+  chatId: number,
+  role: "user" | "assistant",
+  content: string
+): Promise<void> {
+  await supabaseAdmin.from("telegram_messages").insert({
+    telegram_chat_id: chatId,
+    role,
+    content,
+  });
+
+  // Prune old messages — keep only the most recent ones
+  const { data: messages } = await supabaseAdmin
+    .from("telegram_messages")
+    .select("id")
+    .eq("telegram_chat_id", chatId)
+    .order("created_at", { ascending: false })
+    .range(MAX_HISTORY_MESSAGES, MAX_HISTORY_MESSAGES + 100);
+
+  if (messages && messages.length > 0) {
+    const idsToDelete = messages.map((m) => m.id);
+    await supabaseAdmin
+      .from("telegram_messages")
+      .delete()
+      .in("id", idsToDelete);
+  }
+}
+
 // Main entry point: process a natural language calendar query
 export async function processCalendarQuery(
   message: string,
-  userId: string
+  userId: string,
+  chatId: number
 ): Promise<string> {
   const partnerInfo = await getPartnerInfo(userId);
   if (!partnerInfo) {
@@ -202,13 +282,26 @@ export async function processCalendarQuery(
   const { partnerId, partnerName, userTimezone } = partnerInfo;
   const systemPrompt = buildSystemPrompt(userTimezone, partnerName);
 
+  // Get conversation history and append current message
+  const history = await getConversationHistory(chatId);
+  const messages: Anthropic.MessageParam[] = [
+    ...history.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user" as const, content: message },
+  ];
+
+  // Save user message
+  await saveMessage(chatId, "user", message);
+
   // First call: let Claude parse the question and decide to use the tool
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 1024,
     system: systemPrompt,
     tools,
-    messages: [{ role: "user", content: message }],
+    messages,
   });
 
   // If Claude wants to use the tool, execute it and send the result back
@@ -229,7 +322,7 @@ export async function processCalendarQuery(
         system: systemPrompt,
         tools,
         messages: [
-          { role: "user", content: message },
+          ...messages,
           { role: "assistant", content: response.content },
           {
             role: "user",
@@ -244,11 +337,12 @@ export async function processCalendarQuery(
         ],
       });
 
-      // Extract text from the final response
       const textBlock = finalResponse.content.find(
         (b): b is Anthropic.TextBlock => b.type === "text"
       );
-      return textBlock?.text || "Sorry, I couldn't process that request.";
+      const answer = textBlock?.text || "Sorry, I couldn't process that request.";
+      await saveMessage(chatId, "assistant", answer);
+      return answer;
     }
   }
 
@@ -256,5 +350,7 @@ export async function processCalendarQuery(
   const textBlock = response.content.find(
     (b): b is Anthropic.TextBlock => b.type === "text"
   );
-  return textBlock?.text || "Sorry, I couldn't process that request.";
+  const answer = textBlock?.text || "Sorry, I couldn't process that request.";
+  await saveMessage(chatId, "assistant", answer);
+  return answer;
 }

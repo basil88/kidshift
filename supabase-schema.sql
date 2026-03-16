@@ -110,3 +110,15 @@ create table if not exists public.telegram_links (
   used boolean default false,
   created_at timestamptz default now()
 );
+
+-- Telegram conversation history (last N messages per chat for context)
+create table if not exists public.telegram_messages (
+  id bigserial primary key,
+  telegram_chat_id bigint not null,
+  role text not null, -- 'user' or 'assistant'
+  content text not null,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_telegram_messages_chat
+  on public.telegram_messages (telegram_chat_id, created_at desc);

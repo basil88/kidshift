@@ -60,7 +60,7 @@ async function ensureHandlers() {
     await ctx.replyWithChatAction("typing");
 
     try {
-      const answer = await processCalendarQuery(ctx.message.text, userId);
+      const answer = await processCalendarQuery(ctx.message.text, userId, chatId);
       await ctx.reply(answer);
     } catch (error) {
       console.error("Error processing calendar query:", error);
