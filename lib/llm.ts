@@ -135,9 +135,12 @@ async function executeToolCall(
     timeMax = toISO(date_end || date, "23:59", timezone);
   }
 
+  console.log("[LLM] FreeBusy query:", { timeMin, timeMax });
+
   try {
     const token = await getValidAccessToken(partnerId);
     const busy = await fetchFreeBusy(token, timeMin, timeMax);
+    console.log("[LLM] FreeBusy raw:", JSON.stringify(busy));
     return formatBusySlots(busy, timezone);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
@@ -292,6 +295,9 @@ export async function processCalendarQuery(
   // Save user message
   await saveMessage(chatId, "user", message);
 
+  console.log("[LLM] Query:", message);
+  console.log("[LLM] History:", history.length, "messages");
+
   // First call: let Claude parse the question and decide to use the tool
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -301,16 +307,22 @@ export async function processCalendarQuery(
     messages,
   });
 
+  console.log("[LLM] Stop reason:", response.stop_reason);
+
   // If Claude wants to use the tool, execute it and send the result back
   if (response.stop_reason === "tool_use") {
     const toolBlock = response.content.find((b) => b.type === "tool_use");
 
     if (toolBlock && toolBlock.type === "tool_use") {
+      console.log("[LLM] Tool call:", JSON.stringify(toolBlock.input));
+
       const toolResult = await executeToolCall(
         partnerId,
         userTimezone,
         toolBlock.input as { date: string; date_end?: string; time_start?: string; time_end?: string }
       );
+
+      console.log("[LLM] Tool result:", toolResult);
 
       // Second call: Claude formats the result into a natural language answer
       const finalResponse = await anthropic.messages.create({
