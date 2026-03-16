@@ -134,19 +134,20 @@ async function executeToolCall(
 }
 
 function toISO(date: string, time: string, timezone: string): string {
-  // Create a date in the user's timezone, then convert to ISO
-  const dateTimeStr = `${date}T${time}:00`;
-  const d = new Date(
-    new Date(dateTimeStr).toLocaleString("en-US", { timeZone: timezone })
-  );
-  // More reliable: use Intl to get offset
-  const utcDate = new Date(dateTimeStr);
-  const localDate = new Date(
-    utcDate.toLocaleString("en-US", { timeZone: timezone })
-  );
-  const offset = localDate.getTime() - utcDate.getTime();
-  const result = new Date(utcDate.getTime() - offset);
-  return result.toISOString();
+  // Convert "date + time in user's timezone" to a UTC ISO string
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, min] = time.split(":").map(Number);
+
+  // Start with a UTC guess
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, min, 0));
+
+  // Find how far the target timezone is from UTC at this instant
+  const utcStr = utcGuess.toLocaleString("en-US", { timeZone: "UTC" });
+  const tzStr = utcGuess.toLocaleString("en-US", { timeZone: timezone });
+  const offsetMs = new Date(tzStr).getTime() - new Date(utcStr).getTime();
+
+  // Subtract the offset: user says "3 PM in UTC+2" → 1 PM UTC
+  return new Date(utcGuess.getTime() - offsetMs).toISOString();
 }
 
 function formatBusySlots(slots: BusySlot[], timezone: string): string {
