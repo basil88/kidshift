@@ -91,3 +91,22 @@ create policy "Users can update own pairs" on public.pairs
   for update using (
     id in (select pair_id from public.profiles where id = auth.uid())
   );
+
+-- Telegram integration: links Telegram chat to KidShift user
+create table if not exists public.telegram_users (
+  telegram_chat_id bigint primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  telegram_username text,
+  linked_at timestamptz default now(),
+  unique(user_id)
+);
+
+-- Temporary linking codes (10-min TTL)
+create table if not exists public.telegram_links (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  code text not null unique,
+  expires_at timestamptz not null,
+  used boolean default false,
+  created_at timestamptz default now()
+);

@@ -13,6 +13,7 @@ import { usePairStatus } from "@/hooks/usePairStatus";
 import { useCurrentSlot } from "@/hooks/useCurrentSlot";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuthGuard } from "@/components/AuthGuard";
+import { TelegramConnect } from "@/components/telegram/TelegramConnect";
 
 export default function DashboardPage() {
   return (
@@ -168,6 +169,9 @@ function DashboardContent() {
             date={date}
           />
         ) : null}
+
+        {/* Telegram connect */}
+        <TelegramConnect />
 
         {/* Last updated */}
         {freeBusy?.fetchedAt && (
