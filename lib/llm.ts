@@ -122,15 +122,12 @@ async function executeToolCall(
   let timeMax: string;
 
   if (time_start) {
-    // Specific time window
     timeMin = toISO(date, time_start, timezone);
     if (time_end) {
       timeMax = toISO(date_end || date, time_end, timezone);
     } else {
-      // Default to 1-hour window
-      const [h, m] = time_start.split(":").map(Number);
-      const endH = h + 1;
-      timeMax = toISO(date, `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`, timezone);
+      // No end time — check through end of the (last) day
+      timeMax = toISO(date_end || date, "23:59", timezone);
     }
   } else {
     // Whole day or multi-day range
