@@ -5,11 +5,14 @@ import { processCalendarQuery } from "@/lib/llm";
 
 let _initialized = false;
 
-function ensureHandlers() {
+async function ensureHandlers() {
   if (_initialized) return;
   _initialized = true;
 
   const bot = getBot();
+
+  // grammy requires init() before handleUpdate() in serverless environments
+  await bot.init();
 
   // Handle /start command — account linking
   bot.command("start", async (ctx) => {
@@ -74,18 +77,19 @@ export async function POST(req: NextRequest) {
   // Verify webhook secret
   const headerSecret = req.headers.get("x-telegram-bot-api-secret-token");
   if (secret && headerSecret !== secret) {
+    console.error("Webhook secret mismatch");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  ensureHandlers();
-  const bot = getBot();
-
   try {
+    await ensureHandlers();
+    const bot = getBot();
     const body = await req.json();
+    console.log("Received update:", JSON.stringify(body).slice(0, 500));
     await bot.handleUpdate(body);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Telegram webhook error:", error);
-    return NextResponse.json({ ok: true }); // Always 200 to Telegram
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
