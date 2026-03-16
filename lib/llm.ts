@@ -56,7 +56,7 @@ When the user asks about availability:
 
 Keep responses short and conversational. Use the partner's name naturally.
 If a time slot is free, say so directly. If busy, mention the busy window(s) without speculating about what the events are.
-When showing times, use 12-hour format (e.g., "3:00 PM" not "15:00").`;
+When showing times, use 24-hour format (e.g., "15:00" not "3:00 PM").`;
 }
 
 // Look up partner for a given user
@@ -156,17 +156,17 @@ function formatBusySlots(slots: BusySlot[], timezone: string): string {
   }
 
   const formatted = slots.map((slot) => {
-    const start = new Date(slot.start).toLocaleTimeString("en-US", {
+    const start = new Date(slot.start).toLocaleTimeString("en-GB", {
       timeZone: timezone,
-      hour: "numeric",
+      hour: "2-digit",
       minute: "2-digit",
-      hour12: true,
+      hour12: false,
     });
-    const end = new Date(slot.end).toLocaleTimeString("en-US", {
+    const end = new Date(slot.end).toLocaleTimeString("en-GB", {
       timeZone: timezone,
-      hour: "numeric",
+      hour: "2-digit",
       minute: "2-digit",
-      hour12: true,
+      hour12: false,
     });
     return `${start} – ${end}`;
   });
