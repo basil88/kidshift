@@ -7,6 +7,7 @@ interface TimeSlotProps {
   firstHalf: SlotState;
   secondHalf: SlotState;
   isCurrentSlot: boolean;
+  partnerName?: string | null;
 }
 
 const halfStyles: Record<SlotState, string> = {
@@ -16,12 +17,14 @@ const halfStyles: Record<SlotState, string> = {
   conflict: "bg-red-100 border-x border-red-300",
 };
 
-const slotLabels: Record<SlotState, string> = {
-  "both-free": "",
-  "you-busy": "You're busy",
-  "partner-busy": "Partner busy",
-  conflict: "CONFLICT",
-};
+function getSlotLabel(state: SlotState, partnerName?: string | null): string {
+  switch (state) {
+    case "both-free": return "";
+    case "you-busy": return "You're busy";
+    case "partner-busy": return `${partnerName || "Partner"} busy`;
+    case "conflict": return "CONFLICT";
+  }
+}
 
 // Pick the most important state to show a label for the row
 function primaryState(first: SlotState, second: SlotState): SlotState {
@@ -32,8 +35,8 @@ function primaryState(first: SlotState, second: SlotState): SlotState {
   return "both-free";
 }
 
-export function TimeSlot({ time, firstHalf, secondHalf, isCurrentSlot }: TimeSlotProps) {
-  const label = slotLabels[primaryState(firstHalf, secondHalf)];
+export function TimeSlot({ time, firstHalf, secondHalf, isCurrentSlot, partnerName }: TimeSlotProps) {
+  const label = getSlotLabel(primaryState(firstHalf, secondHalf), partnerName);
   const uniform = firstHalf === secondHalf;
 
   return (
@@ -84,7 +87,7 @@ export function TimeSlot({ time, firstHalf, secondHalf, isCurrentSlot }: TimeSlo
                       : "text-amber-700"
                   }`}
                 >
-                  {slotLabels[firstHalf]}
+                  {getSlotLabel(firstHalf, partnerName)}
                 </span>
               )}
             </div>
@@ -101,7 +104,7 @@ export function TimeSlot({ time, firstHalf, secondHalf, isCurrentSlot }: TimeSlo
                       : "text-amber-700"
                   }`}
                 >
-                  {slotLabels[secondHalf]}
+                  {getSlotLabel(secondHalf, partnerName)}
                 </span>
               )}
             </div>

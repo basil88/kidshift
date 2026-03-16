@@ -9,6 +9,7 @@ interface DayTimelineProps {
   yourBusy: BusySlot[];
   partnerBusy: BusySlot[];
   date: string; // YYYY-MM-DD
+  partnerName?: string | null;
 }
 
 const START_HOUR = 7;
@@ -52,7 +53,7 @@ function isCurrentSlot(slotStart: Date, slotEnd: Date): boolean {
   return now >= slotStart && now < slotEnd;
 }
 
-export function DayTimeline({ yourBusy, partnerBusy, date }: DayTimelineProps) {
+export function DayTimeline({ yourBusy, partnerBusy, date, partnerName }: DayTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const nowSlotRef = useRef<HTMLDivElement>(null);
 
@@ -104,6 +105,7 @@ export function DayTimeline({ yourBusy, partnerBusy, date }: DayTimelineProps) {
             firstHalf={slot.firstHalf}
             secondHalf={slot.secondHalf}
             isCurrentSlot={slot.isCurrent}
+            partnerName={partnerName}
           />
         </div>
       ))}

@@ -172,6 +172,7 @@ function DashboardContent() {
             yourBusy={freeBusy.you}
             partnerBusy={freeBusy.partner}
             date={date}
+            partnerName={partnerName}
           />
         ) : null}
 
